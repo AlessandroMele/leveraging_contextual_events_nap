@@ -1,0 +1,16 @@
+dataset/*_tensors
+
+models/five_runs
+
+materials
+
+models/BPI12WC
+models/BPI20P
+models/BPI20R
+models/Helpdesk_no_resources
+models/Receipt
+models/prefix_results
+
+five_runs_best_conf.py
+venv
+.idea
