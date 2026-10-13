@@ -36,7 +36,6 @@ def get_hyperparameters(trial):
 def train_and_val_network(model, device, optimizer, criterion, train_loader, val_loader):
     model.train()
     train_loss = 0.0
-    epoch_grad_norm = 0.0
     for batch in train_loader:
         batch = batch.to(device)
 
@@ -46,17 +45,11 @@ def train_and_val_network(model, device, optimizer, criterion, train_loader, val
 
         optimizer.zero_grad()
         loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            model.parameters(),
-            1.0
-        )
 
         optimizer.step()
 
-        epoch_grad_norm += grad_norm.item()
         train_loss += loss.item()
 
-    epoch_grad_norm /= len(train_loader)
     train_loss /= len(train_loader)
 
     model.eval()
@@ -72,7 +65,7 @@ def train_and_val_network(model, device, optimizer, criterion, train_loader, val
 
     val_loss /= len(val_loader)
 
-    return train_loss, val_loss, epoch_grad_norm, optimizer.param_groups[0]['lr']
+    return train_loss, val_loss, optimizer.param_groups[0]['lr']
 
 
 def test_network(model, device, criterion, test_loader):
@@ -130,7 +123,7 @@ def objective(trial, train_dataset, val_dataset, test_dataset, device, log_name,
 
         p_str += f'_{n_k}_{value}'
 
-    ck_path = join('various/optuna', f'{log_name}_{variant}_ckp_{p_str}.pt')
+    ck_path = join('various', 'optuna', f'{log_name}_{variant}_ckp_{p_str}.pt')
 
     train_loader = DataLoader(dataset=train_dataset, batch_size=parameters.get('batch_size'))
     val_loader = DataLoader(dataset=val_dataset, batch_size=parameters.get('batch_size'))
@@ -140,7 +133,7 @@ def objective(trial, train_dataset, val_dataset, test_dataset, device, log_name,
 
     model = GNN(data=train_dataset[0], parameters=parameters)
     model = model.to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=parameters.get("learning_rate"), weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=parameters.get('learning_rate'), weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, min_lr=1e-6)
     epochs_done = 0
     best_val = float('inf')
@@ -162,9 +155,9 @@ def objective(trial, train_dataset, val_dataset, test_dataset, device, log_name,
     makedirs(join('models', log_name, variant), exist_ok=True)
     metrics = {}
     for epoch in range(epochs_done, EPOCHS):
-        train, val, grad_norm, lr = train_and_val_network(model, device, optimizer, criterion, train_loader, val_loader)
+        train, val, lr = train_and_val_network(model, device, optimizer, criterion, train_loader, val_loader)
 
-        report = f'Epoch: {epoch+1} | {grad_norm:.4f} | {lr:.3e} | Train: {train:.4f} | Val: {val:.4f}'
+        report = f'Epoch: {epoch+1} | {lr:.3e} | Train: {train:.4f} | Val: {val:.4f}'
         if val < best_val:
             no_improvements = 0
 
@@ -229,10 +222,10 @@ def main(log_name, variant):
     val_dataset = [data for data in prefixes if data.get('set') == 'validation']
     test_dataset = [data for data in prefixes if data.get('set') == 'test']
 
-    makedirs(join('various/optuna'), exist_ok=True)
-    db_path, sp_path, pr_path = (join(f'various/optuna', f'{log_name}_{variant}.db'),
-                                 join(f'various/optuna', f'{log_name}_sampler_{variant}.pkl'),
-                                 join(f'various/optuna', f'{log_name}_pruner_{variant}.pkl'))
+    makedirs(join('various', 'optuna'), exist_ok=True)
+    db_path, sp_path, pr_path = (join(f'various', 'optuna', f'{log_name}_{variant}.db'),
+                                 join(f'various', 'optuna', f'{log_name}_sampler_{variant}.pkl'),
+                                 join(f'various', 'optuna', f'{log_name}_pruner_{variant}.pkl'))
 
     # load study
     if exists(db_path) and exists(sp_path) and exists(pr_path):
@@ -253,7 +246,7 @@ def main(log_name, variant):
 
         # queue fail trial
         for trial in study.trials:
-            if trial.state == optuna.trial.TrialState.FAIL:
+            if trial.state != optuna.trial.TrialState.COMPLETE:
                 study.enqueue_trial(trial.params)
         resumed = True
 
@@ -275,7 +268,7 @@ def main(log_name, variant):
         with open(pr_path, 'wb') as fout:
             dump(study.pruner, fout)
 
-    completed = len([trial for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETED])
+    completed = len([trial for trial in study.trials if trial.state == optuna.trial.TrialState.COMPLETE])
     study.optimize(lambda trial: objective(trial, train_dataset, val_dataset, test_dataset, device, log_name, resumed, variant),
                    n_trials=N_TRIALS - completed, show_progress_bar=True, gc_after_trial=True, catch=(Exception,))
 
