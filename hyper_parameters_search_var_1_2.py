@@ -23,13 +23,14 @@ def set_seed():
 
 def get_hyperparameters(trial):
     return {
+
         'learning_rate': trial.suggest_loguniform('learning_rate', 1e-5, 1e-2),
         'batch_size': trial.suggest_int('batch_size', 128, 256, step=64),
         'hidden_layers': trial.suggest_int('hidden_layers', 0, 4),
         'layers_size': trial.suggest_int('layers_size', 64, 256, step=32),
         'dropout': trial.suggest_float('dropout', 0.0, 0.4),
-        'aggregator': trial.suggest_categorical('aggregator', ['sum', 'mean']),
         'readout': trial.suggest_categorical('readout', ['add', 'mean', 'max']),
+        'aggregator': trial.suggest_categorical('aggregator', ['sum', 'mean']),
     }
 
 
